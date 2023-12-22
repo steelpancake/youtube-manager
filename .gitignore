@@ -1,5 +1,6 @@
 ## custom gitignore section
 config.json
+archive.txt
 
 venv/
 __pycache__/

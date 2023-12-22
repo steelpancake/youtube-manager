@@ -1,2 +1,3 @@
 argparse
+jsonpickle
 yt-dlp

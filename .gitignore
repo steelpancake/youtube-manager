@@ -1,3 +1,6 @@
+## custom gitignore section
+config.json
+
 venv/
 __pycache__/
 # Byte-compiled / optimized / DLL files

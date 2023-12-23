@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import jsonpickle
+import main
+import copy
 
 
 class Config:
@@ -9,9 +11,16 @@ class Config:
         self.channels = []
         self.opts = []
         self.playlists = []
+        self.formats = {
+                "default": {
+                     'format': '(bv+(250/251))[filesize<?50M][filesize_approx<?100M]',
+                     'format_sort': ['vcodec:vp9', 'acodec', 'res:480'],
+                }
+        }
 
 
 class Channel:
+    import main
     def __init__(self):
         self.url = ""
         self.nick = ""
@@ -20,6 +29,7 @@ class Channel:
         self.deleted = False
         self.ignored_videos = []
         self.info_dict = {}
+        self.preferred_format = "default"
 
     def __repr__(self):
         return "<Channel nick: % s, url: % s>" % (self.nick, self.url)
@@ -47,11 +57,33 @@ class Channel:
     def url_from_id(url: str):
         return ("https://www.youtube.com/channel/" + url)
 
+    def playlist_url_from_id(id: str):
+        string = id[2:]
+        return "https://www.youtube.com/playlist?list=" + "UU" + string
+
     def is_url_in_list(url: str, arr):
         for entry in arr:
             if entry.url == url:
                 return True
         return False
+
+    def find_in_list(url: str, arr=None):
+        arr = [arr]
+        if not arr[0]:
+            import main
+            arr[0] = main.globs.conf.channels
+        arr = arr[0]
+        for i in range(len(arr)):
+            if arr[i].url == url:
+                return i
+
+    def opts_with_preferred_format(self, opts: dict):
+        import main
+        opts = copy.copy(opts)
+        format = main.this.globs.conf.formats[self.preferred_format]
+        opts['format'] = format['format']
+        opts['format_sort'] = format['format_sort']
+        return opts
 
 
 class Video:

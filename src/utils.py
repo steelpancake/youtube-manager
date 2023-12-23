@@ -40,6 +40,18 @@ def ask_confirm(dictionary, type="<PLACEHOLDER>"):
         "\nurl:\t{url}"
         "\nuploader:\t{uploader}\n"
     )
-    string = string.format(type=type, title=dictionary["title"], id=dictionary["id"],url=dictionary["webpage_url"], uploader=dictionary["uploader"])
+    tmp = {}
+    try:
+        tmp["url"] = dictionary["webpage_url"]
+    except:
+        tmp["url"] = dictionary["url"]
+    string = string.format(type=type, title=dictionary["title"], id=dictionary["id"],url=tmp["url"], uploader=dictionary["uploader"])
     print(string)
-    return y_n_to_bool(input("confirm? "))
+    response = input("confirm?(Yes/No/Ignore) ").lower()
+    if response == "i":
+        return "ignore"
+    elif response == "n":
+        return "no"
+    elif response == "y":
+        return "yes"
+    return response

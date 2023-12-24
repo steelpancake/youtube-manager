@@ -23,7 +23,11 @@ y   / n  / i      / ia         / skip
 yes / no / ignore / ignore all / skip
 ```
 - yes  will download the video and then ask you what format you want to download it in
+
 - no  will skip only one video (will ask next time)
+
 - ignore  will add the video to the archive (will not ask next time)
+
 - ignore all  will add the entire channel/playlist to the archive (will not ask until a new video is added)
+
 - skip  same as no but for entire channel/playlist

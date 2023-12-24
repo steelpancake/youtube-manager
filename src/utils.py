@@ -1,5 +1,6 @@
 import sys
 import io
+import webbrowser
 
 def y_n_to_bool(str):
     return str == "y"
@@ -48,6 +49,9 @@ def ask_confirm(dictionary, type="<PLACEHOLDER>"):
         tmp["url"] = dictionary["webpage_url"]
     except:
         tmp["url"] = dictionary["url"]
+
+    webbrowser.open(tmp["url"])
+
     string = string.format(type=type, title=dictionary["title"], id=dictionary["id"],url=tmp["url"], uploader=dictionary["uploader"])
     print(string)
     response = input("confirm?(Yes/No/Ignore) ").lower()

@@ -89,7 +89,7 @@ def crawl_channels():
         crawl_playlist_url(url, channel)
 
 
-def crawl_playlist_url(playlist, channel: config.Channel = None):
+def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     selected_videos = []
     info_opts = {
         "extract_flat": True,
@@ -109,40 +109,47 @@ def crawl_playlist_url(playlist, channel: config.Channel = None):
         if ignore_all[0]:
             ydl.record_download_archive(entry)
             continue
+
+        channel = [in_channel]
+        if not channel[0]:
+            channel[0] = globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
+        entry["manager_channel"] = channel[0]
+
         if this.globs.args.nc:
+            entry["manager_selected_format"] = channel[0].preferred_format
             selected_videos.append(entry)
             continue
+
         response = utils.ask_confirm(entry, type="video entry")
         if response == "no":
             continue
         elif response == "yes":
+            entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
             selected_videos.append(entry)
             continue
         elif response == "ignore all":
             ydl.record_download_archive(entry)
             ignore_all[0] = True
             continue
+        elif response == "skip":
+            break
         else:
             ydl.record_download_archive(entry)
             continue
 
     for entry in selected_videos:
-        channel = [channel]
-        if not channel[0]:
-            channel[0] = globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
-        channel = channel[0]
-        dir = channel.dir
+        channel = entry["manager_channel"]
         
         dl_opts = {
             "extract_flat": True,
             "download_archive": this.globs.args.archive,
-            'outtmpl': {'default': "{}/".format(dir) + '%(upload_date)s %(title)s - %(id)s.%(ext)s'},
+            'outtmpl': {'default': "{}/".format(channel.dir) + '%(upload_date)s %(title)s - %(id)s.%(ext)s'},
             "sleep_interval": 0.1,
             "sleep_interval_requests": 0.1,
             'concurrent_fragment_downloads': 25,
             'writeinfojson': True
         }
-        tmp_opts = this.globs.conf.formats[get_user_format(channel)]
+        tmp_opts = this.globs.conf.formats[entry["manager_selected_format"]]
         print(jsonpickle.encode(tmp_opts, indent=4))
         dl_opts.update(tmp_opts)
         print(jsonpickle.encode(dl_opts, indent=4))

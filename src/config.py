@@ -12,11 +12,39 @@ class Config:
         self.opts = []
         self.playlists = []
         self.formats = {
+                "240": {
+                     'format': '(bv+(250/251/ba))',
+                     'format_sort': ['vcodec:vp9', 'acodec', 'res:240'],
+                     'prefer_free_formats': True,
+                },
                 "default": {
-                     'format': '(bv+(250/251))[filesize<?50M][filesize_approx<?100M]',
+                     'format': '(bv+(250/251/ba))[filesize<?50M][filesize_approx<?100M]',
                      'format_sort': ['vcodec:vp9', 'acodec', 'res:480'],
+                     'prefer_free_formats': True,
+                },
+                "720": {
+                     'format': '(bv+(250/251/ba))',
+                     'format_sort': ['vcodec:vp9', 'acodec', 'res:720'],
+                     'prefer_free_formats': True,
+                },
+                "1080": {
+                     'format': '(bv+(250/251/ba))',
+                     'format_sort': ['vcodec:vp9', 'acodec', 'res:1080'],
+                     'prefer_free_formats': True,
                 }
         }
+
+    def list_channels(self):
+        for i in range(len(self.channels)):
+            print(str(i) + "\t" + str(self.channels[i]))
+
+    def list_playlists(self):
+        for playlist in self.playlists:
+            print(playlist)
+
+    def reset_formats(self):
+        new_conf = Config()
+        self.formats = new_conf.formats
 
 
 class Channel:
@@ -32,7 +60,7 @@ class Channel:
         self.preferred_format = "default"
 
     def __repr__(self):
-        return "<Channel nick: % s, url: % s>" % (self.nick, self.url)
+        return "<Channel nick: '% s', \turl: % s>" % (self.nick, self.url)
 
     def from_dict(self, dictionary):
         self.url = dictionary["url"]
@@ -81,8 +109,7 @@ class Channel:
         import main
         opts = copy.copy(opts)
         format = main.this.globs.conf.formats[self.preferred_format]
-        opts['format'] = format['format']
-        opts['format_sort'] = format['format_sort']
+        opts.update(format)
         return opts
 
 
@@ -95,15 +122,6 @@ class Video:
             return info["webpage_url_basename"] == "watch"
         except:
             return False
-
-
-# converts a raw config into one containing the class versions
-def raw_to_parsed(conf):
-    channels = []
-    for entry in conf["channels"]:
-        channel = Channel().from_dict(entry)
-        channels.append(channel)
-    conf["channels"] = channels
 
 
 def check_make_archive(path="archive.txt"):

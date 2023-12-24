@@ -1,3 +1,6 @@
+import sys
+import io
+
 def y_n_to_bool(str):
     return str == "y"
 
@@ -50,8 +53,19 @@ def ask_confirm(dictionary, type="<PLACEHOLDER>"):
     response = input("confirm?(Yes/No/Ignore) ").lower()
     if response == "i":
         return "ignore"
+    elif response == "ia":
+        return "ignore all"
     elif response == "n":
         return "no"
     elif response == "y":
         return "yes"
     return response
+
+
+def log_error(message):
+    print("ERROR: " + str(message), file=sys.stderr)
+
+
+def log_warn(message):
+    print("WARN: " + str(message), file=sys.stderr)
+

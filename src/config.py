@@ -74,13 +74,15 @@ class Channel:
 
     def from_info_dict(self, info):
         self.url = Channel.url_from_id(info["channel_id"])
-        self.nick = input("any nickname for this channel? (leave blank for no) ") or info["uploader"]
         self.dir = self.nick
         self.info_dict = info
         self.ignore = False
         self.deleted = False
         self.ignored_videos = {}
         return self
+
+    def ask_nickname(self):
+        self.nick = input("any nickname for this channel? (leave blank for no) ") or self.info_dict["uploader"]
 
     def url_from_id(url: str):
         return ("https://www.youtube.com/channel/" + url)
@@ -95,7 +97,7 @@ class Channel:
                 return True
         return False
 
-    def find_in_list(url: str, arr=None):
+    def find_in_list(self, url: str, arr=None):
         arr = [arr]
         if not arr[0]:
             import main

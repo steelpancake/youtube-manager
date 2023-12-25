@@ -22,6 +22,7 @@ def handle_args():
     parser.add_argument("--conf",       help="custom path for config",  default="config.json")
     parser.add_argument("--archive",    help="custom path for archive", default="archive.txt")
     parser.add_argument("--nc", "--no-confirm", action="store_true", help="do not confirm before downloading video")
+    parser.add_argument("--nb", "--no-browser", action="store_true", help="do not open browser to show link")
     parser.add_argument("--nf", "--no-format" , action="store_true", help="do not ask the format to download a video in")
     parser.add_argument("--lc", "--list-channels", action="store_true", help="list all the channels")
     parser.add_argument("--lp", "--list-playlists",action="store_true", help="list all the playlists")
@@ -67,11 +68,18 @@ def add_channel(url):
         info = ydl.sanitize_info(info[0])
         info = utils.clean_entries(info)
         print(info)
+        
+        channel = config.Channel().from_info_dict(info)
+
+        if config.Channel().find_in_list(channel.url) != None:
+            utils.log_warn("channel already in list")
+            return
 
         if not (this.globs.args.nc or utils.ask_confirm(info, type="channel")):
             return
 
-        channel = config.Channel().from_info_dict(info)
+        channel.ask_nickname()
+
         config.add_channel(this.globs.conf, channel)
 
 
@@ -104,11 +112,15 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     except:
         return
 
-    ignore_all = [False]
+    ignore_all  = [False]
+    skip_all    = [False]
     for entry in info["entries"]:
         if ignore_all[0]:
             ydl.record_download_archive(entry)
             continue
+
+        if skip_all[0]:
+            break
 
         channel = [in_channel]
         if not channel[0]:
@@ -120,22 +132,25 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
             selected_videos.append(entry)
             continue
 
-        response = utils.ask_confirm(entry, type="video entry")
-        if response == "no":
-            continue
-        elif response == "yes":
-            entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
-            selected_videos.append(entry)
-            continue
-        elif response == "ignore all":
-            ydl.record_download_archive(entry)
-            ignore_all[0] = True
-            continue
-        elif response == "skip":
-            break
-        else:
-            ydl.record_download_archive(entry)
-            continue
+        while True:
+            response = utils.ask_confirm(entry, type="video entry")
+            if response == "no":
+                break
+            elif response == "yes":
+                entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
+                selected_videos.append(entry)
+                break
+            elif response == "ignore all":
+                ydl.record_download_archive(entry)
+                ignore_all[0] = True
+                break
+            elif response == "ignore":
+                ydl.record_download_archive(entry)
+                break
+            elif response == "skip":
+                skip_all[0] = True
+                break
+            print("invalid response")
 
     for entry in selected_videos:
         channel = entry["manager_channel"]
@@ -171,6 +186,7 @@ def get_user_format(channel=None):
         req = input("which format?(leave blank for channel default) ")
         if not req in this.globs.conf.formats.keys() and req != "":
             print('selected format "{}" not in keys'.format(req))
+            continue
         elif req == "":
             if not channel:
                 raise "this function cannot find default format if a channel isnt given"

@@ -83,6 +83,7 @@ class Channel:
 
     def ask_nickname(self):
         self.nick = input("any nickname for this channel? (leave blank for no) ") or self.info_dict["uploader"]
+        self.dir = self.nick
 
     def url_from_id(url: str):
         return ("https://www.youtube.com/channel/" + url)
@@ -113,6 +114,10 @@ class Channel:
         format = main.this.globs.conf.formats[self.preferred_format]
         opts.update(format)
         return opts
+
+    def make_dir(self):
+        path = os.path.join(os.getcwd(), self.dir)
+        os.makedirs(path, exist_ok=True)
 
 
 class Video:

@@ -79,6 +79,7 @@ def add_channel(url):
             return
 
         channel.ask_nickname()
+        channel.make_dir()
 
         config.add_channel(this.globs.conf, channel)
 

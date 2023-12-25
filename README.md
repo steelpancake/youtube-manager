@@ -2,6 +2,7 @@
 a project to help in managing the scraping of youtube channels (at risk of deletion)  
 
 # usage
+[![asciicast](https://asciinema.org/a/628776.svg)](https://asciinema.org/a/628776)
 ```
 python <path to __init__.py>
 ```

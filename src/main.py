@@ -21,6 +21,9 @@ def handle_args():
     parser.add_argument("--ap", "--add-playlist",   help="add a playlist to scan")
     parser.add_argument("--conf",       help="custom path for config",  default="config.json")
     parser.add_argument("--archive",    help="custom path for archive", default="archive.txt")
+    parser.add_argument("--dv", "--download-video", help="download video")
+    parser.add_argument("--c",  "--cookies", help="cookie file", default="cookies.txt")
+
     parser.add_argument("--nc", "--no-confirm", action="store_true", help="do not confirm before downloading video")
     parser.add_argument("--nb", "--no-browser", action="store_true", help="do not open browser to show link")
     parser.add_argument("--nf", "--no-format" , action="store_true", help="do not ask the format to download a video in")
@@ -39,9 +42,13 @@ def main():
     this.globs.conf = config.get()
 
     args = this.globs.args
+    this.globs.conf.do_checks()
 
     if args.ac:
         add_channel(url = args.ac)
+        config.save(this.globs.conf)
+    elif args.dv:
+        download_video(url = args.dv)
         config.save(this.globs.conf)
     elif args.lc:
         this.globs.conf.list_channels()
@@ -52,6 +59,14 @@ def main():
         config.save(this.globs.conf)
     else:
         crawl()
+
+
+def fetch_info(url):
+    opts = {
+        "extract_flat": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
 
 
 def add_channel(url):
@@ -68,12 +83,13 @@ def add_channel(url):
         info = ydl.sanitize_info(info[0])
         info = utils.clean_entries(info)
         print(info)
+
+        channel = config.Channel.find_in_list(url=info["webpage_url"])
+        if channel:
+            utils.log_warn("channel already in list")
+            return channel
         
         channel = config.Channel().from_info_dict(info)
-
-        if config.Channel().find_in_list(channel.url) != None:
-            utils.log_warn("channel already in list")
-            return
 
         if not (this.globs.args.nc or utils.ask_confirm(info, type="channel")):
             return
@@ -82,6 +98,67 @@ def add_channel(url):
         channel.make_dir()
 
         config.add_channel(this.globs.conf, channel)
+        return channel
+
+
+def download_video(url):
+    channel = [0]
+    while True:
+        channel[0] = add_channel(url)
+        if channel[0]:
+            break
+    channel = channel[0]
+
+    info = fetch_info(url)
+    if not channel:
+        channel = globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
+    info["manager_channel"] = channel
+
+    if this.globs.args.nc:
+        info["manager_selected_format"] = channel.preferred_format
+        selected_videos.append(entry)
+
+    selected = [False]
+    while True:
+        response = utils.ask_confirm(info, type="video entry")
+        if response == "no":
+            break
+        elif response == "yes":
+            info["manager_selected_format"] = get_user_format(info["manager_channel"])
+            selected[0] = True
+            break
+        elif response == "ignore all":
+            ydl.record_download_archive(info)
+            ignore_all[0] = True
+            break
+        elif response == "ignore":
+            ydl.record_download_archive(info)
+            break
+        print("invalid response")
+
+    if selected[0]:
+        channel = info["manager_channel"]
+        
+        dl_opts = {
+            "extract_flat": True,
+            "download_archive": this.globs.args.archive,
+            'outtmpl': {'default': "{}/".format(channel.dir) + '%(upload_date)s %(title)s - %(id)s.%(ext)s'},
+            "sleep_interval": 0.1,
+            "sleep_interval_requests": 0.1,
+            'concurrent_fragment_downloads': 25,
+            'writeinfojson': True,
+            'cookiefile': this.globs.args.c
+        }
+        tmp_opts = this.globs.conf.formats[info["manager_selected_format"]]
+        print(jsonpickle.encode(tmp_opts, indent=4))
+        dl_opts.update(tmp_opts)
+        print(jsonpickle.encode(dl_opts, indent=4))
+
+        ydl_dl = yt_dlp.YoutubeDL(dl_opts)
+        try:
+            output = ydl_dl.download(url)
+        except yt_dlp.utils.DownloadError as e:
+            utils.log_error(e)
 
 
 def crawl():
@@ -163,7 +240,8 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
             "sleep_interval": 0.1,
             "sleep_interval_requests": 0.1,
             'concurrent_fragment_downloads': 25,
-            'writeinfojson': True
+            'writeinfojson': True,
+            'cookiefile': this.globs.args.c
         }
         tmp_opts = this.globs.conf.formats[entry["manager_selected_format"]]
         print(jsonpickle.encode(tmp_opts, indent=4))
@@ -190,7 +268,7 @@ def get_user_format(channel=None):
             continue
         elif req == "":
             if not channel:
-                raise "this function cannot find default format if a channel isnt given"
+                raise "this function cannot find default format if a channel isnt given. notify the developer or try fixing it urself smh"
             format.append(channel.preferred_format)
             break
         format.append(req)

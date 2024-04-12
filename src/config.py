@@ -8,9 +8,7 @@ import copy
 
 class Config:
     def __init__(self):
-        self.channels = []
         self.opts = []
-        self.playlists = []
         self.formats = {
                 "240": {
                      'format': '(bv+(250/251/ba))',
@@ -33,6 +31,8 @@ class Config:
                      'prefer_free_formats': True,
                 }
         }
+        self.playlists = []
+        self.channels = []
 
     def list_channels(self):
         for i in range(len(self.channels)):
@@ -45,6 +45,23 @@ class Config:
     def reset_formats(self):
         new_conf = Config()
         self.formats = new_conf.formats
+
+    def check_make_channel_nicks(self):
+        for channel in self.channels:
+            if channel.dir == "":
+                channel.dir = channel.nick
+
+    def check_make_dirs(self):
+        folders = []
+        for root, dirs, files in os.walk("."):
+            folders.append(root)
+        for channel in self.channels:
+            if not channel.dir in folders:
+                channel.make_dir()
+         
+    def do_checks(self):
+        self.check_make_channel_nicks()
+        self.check_make_dirs()
 
 
 class Channel:
@@ -60,7 +77,7 @@ class Channel:
         self.preferred_format = "default"
 
     def __repr__(self):
-        return "<Channel nick: '% s', \turl: % s>" % (self.nick, self.url)
+        return "<Channel nick: '% s'\n\tdir: '% s'\n\turl: % s>" % (self.nick, self.dir, self.url)
 
     def from_dict(self, dictionary):
         self.url = dictionary["url"]
@@ -98,7 +115,7 @@ class Channel:
                 return True
         return False
 
-    def find_in_list(self, url: str, arr=None):
+    def find_in_list(url: str, arr=None):
         arr = [arr]
         if not arr[0]:
             import main
@@ -118,6 +135,7 @@ class Channel:
     def make_dir(self):
         path = os.path.join(os.getcwd(), self.dir)
         os.makedirs(path, exist_ok=True)
+        print("made directory for channel: ", self.nick, " at ", str(path))
 
 
 class Video:

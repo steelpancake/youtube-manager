@@ -8,31 +8,12 @@ def y_n_to_bool(str):
 
 def clean_entries(dictionary):
     dictionary = dict(dictionary)
-    try:
-        del dictionary["entries"]
-    except KeyError as e:
-        pass
-
-    try:
-        del dictionary["formats"]
-    except KeyError as e:
-        pass
-
-    try:
-        del dictionary["requested_formats"]
-    except KeyError as e:
-        pass
-
-    try:
-        del dictionary["thumbnail"]
-    except KeyError as e:
-        pass
-
-    try:
-        del dictionary["thumbnails"]
-    except KeyError as e:
-        pass
-
+    delete = ["entries", "formats", "requested_formats", "thumbnail", "thumbnails"]
+    for idx in delete:
+        try:
+            del dictionary[idx]
+        except KeyError as e:
+            pass
     return dictionary
 
 

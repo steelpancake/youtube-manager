@@ -1,5 +1,4 @@
-#!/bin/python3
-import yt_dlp
+#!/bin/python3 import yt_dlp
 import sys
 import time
 import multiprocessing

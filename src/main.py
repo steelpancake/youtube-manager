@@ -9,3 +9,5 @@ import jsonpickle
 import webbrowser
 
 
+def main():
+    config.init()

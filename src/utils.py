@@ -2,13 +2,15 @@ import sys
 import io
 import webbrowser
 
+verbose = True
+args = None
+
 def y_n_to_bool(str):
     return str == "y"
 
 
-def clean_entries(dictionary):
+def clean_entries(dictionary, delete = ["entries", "formats", "requested_formats", "thumbnail", "thumbnails", "automatic_captions"]):
     dictionary = dict(dictionary)
-    delete = ["entries", "formats", "requested_formats", "thumbnail", "thumbnails"]
     for idx in delete:
         try:
             del dictionary[idx]
@@ -17,7 +19,17 @@ def clean_entries(dictionary):
     return dictionary
 
 
-def ask_confirm(dictionary, type="<PLACEHOLDER>"):
+def print_dict(dictionary):
+    for key in dictionary.keys():
+        print(key)
+
+
+def ask_confirm(dictionary):
+    try:
+        type = dictionary["_type"]
+    except:
+        type = lambda : 'video' if dictionary['fps'] else 'UNKNOWN TYPE'
+        type = type()
     string = (
         "\nPlease confirm this {type}"
         "\ntitle:\t{title}"
@@ -31,11 +43,13 @@ def ask_confirm(dictionary, type="<PLACEHOLDER>"):
     except:
         tmp["url"] = dictionary["url"]
 
-    webbrowser.open(tmp["url"])
+    print(args)
+    if not args.nb:
+        webbrowser.open(tmp["url"])
 
     string = string.format(type=type, title=dictionary["title"], id=dictionary["id"],url=tmp["url"], uploader=dictionary["uploader"])
     print(string)
-    response = input("confirm?(Yes/No/Ignore) ").lower()
+    response = input("confirm?(Yes/No/Ignore) leave blank for no ").lower()
     if response == "i":
         return "ignore"
     elif response == "ia":
@@ -44,8 +58,13 @@ def ask_confirm(dictionary, type="<PLACEHOLDER>"):
         return "no"
     elif response == "y":
         return "yes"
+    elif response == "skip":
+        return "skip"
     return response
 
+def log(message):
+    if verbose:
+        print("LOG: " + str(message), file=sys.stderr)
 
 def log_error(message):
     print("ERROR: " + str(message), file=sys.stderr)

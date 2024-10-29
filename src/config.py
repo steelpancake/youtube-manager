@@ -197,7 +197,7 @@ class Playlist:
         return False
 
     def ask_nickname(self):
-        self.nick = input("any nickname for this playlist? (leave blank for no) ") or self.info_dict["uploader"]
+        self.nick = input("any nickname for this playlist? (leave blank for no) ") or self.info_dict["title"]
         self.dir = self.nick
 
     def playlist_url_from_id(id: str):

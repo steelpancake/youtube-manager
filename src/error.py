@@ -1,0 +1,2 @@
+class YTManager(Exception):
+    pass

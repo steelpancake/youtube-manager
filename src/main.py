@@ -7,6 +7,10 @@ import json
 import sys
 import jsonpickle
 import webbrowser
+import re
+import os
+import error
+from glob import glob, iglob
 
 # global vars that actually work
 class Box:
@@ -77,16 +81,25 @@ def main():
     utils.log(str(this.globs.conf))
 
 
-def fetch_info(url):
+def fetch_info(url, process=True):
     opts = {
         "extract_flat": True,
         "cookiefile": this.globs.args.c,
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
-        return ydl.extract_info(url, download=False, process=True)
+        return ydl.extract_info(url, download=False, process=process)
+
+
+def get_channel(entry):
+    try:
+        return globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
+    except TypeError:
+        utils.log("channel is not added yet for " + entry["id"])
+        return add_channel(entry["webpage_url"])
 
 
 def add_channel(url):
+    # TODO: add option to ignore channel while adding it
     utils.log("add_channel run with url: "+url)
     opts = {
         "extract_flat": True,
@@ -120,6 +133,39 @@ def add_channel(url):
         print(channel)
         return channel
 
+
+def entries_in_archive(entries, archive = None, negate: bool = False):
+    """
+    checks list of video entries  which is a list of video info_dicts (hopefully) 
+    and returns whichever ones are or aren't already in the archive
+    """
+    def check_archive():
+        if archive == None:
+            return this.globs.args.archive
+        else:
+            return archive
+    archive = check_archive()
+    
+    info_opts = {
+        "download_archive": archive
+    }
+    ydl = yt_dlp.YoutubeDL(info_opts)
+
+    def myfilter(entry):
+        if negate:
+            return not ydl.in_download_archive(entry)
+        else:
+            return ydl.in_download_archive(entry)
+    output = list(filter(myfilter, entries))
+
+    for entry in output:
+        if negate:
+            pass
+        else:
+            string = "{id} has already been recorded in archive".format(id = entry["id"])
+            utils.log(string)
+    return output
+    
 
 def add_playlist(url):
     opts = {
@@ -191,12 +237,12 @@ def download_video(url):
         dl_opts = {
             "extract_flat": True,
             "download_archive": this.globs.args.archive,
-            'outtmpl': {'default': "{}/".format(channel.dir) + '%(upload_date)s %(title)s - %(id)s.%(ext)s'},
+            "outtmpl": {"default": "{}/".format(channel.dir) + "%(upload_date)s %(title)s - %(id)s.%(ext)s"},
             "sleep_interval": 0.1,
             "sleep_interval_requests": 0.1,
-            'concurrent_fragment_downloads': 25,
-            'writeinfojson': True,
-            'cookiefile': this.globs.args.c,
+            "concurrent_fragment_downloads": 25,
+            "writeinfojson": True,
+            "cookiefile": this.globs.args.c,
         }
         tmp_opts = this.globs.conf.formats[info["manager_selected_format"]]
         print(jsonpickle.encode(tmp_opts, indent=4))
@@ -238,16 +284,50 @@ def crawl_playlists():
     pass
 
 
+def find_deja_downloaded(entry):
+    matches = []
+    for direntry in iglob("./**", recursive=True):
+        if not os.path.isfile(direntry):
+            continue
+        result1 = re.search("{}.*$".format(entry["id"]), direntry)
+        result2 = re.search(".*playlist.*", direntry)
+        if result1 and not result2:
+            utils.log("while searching for matching ids, we found {}".format(direntry))
+            matches.append(direntry)
+    
+    def filter_infojson(i, log=True):
+        utils.log("checking for .info.json "+i)
+        if i.endswith(".info.json"):
+            if log: utils.log("found two matches while searching for already downloaded id {id}, "
+                              "one of them is an info json: {i}`\nthe other one will be symlinked"
+                              " to".format(id=entry["id"], i=i))
+        else:
+            return True
+
+    if len(matches) == 2:
+        matches = list(filter(filter_infojson, matches))
+        if len(matches) == 2:
+            raise error.YTManager("while filtering two matched files with id: {id} neither were "
+                                  ".info.json and therefore could not be narrowed down into one"
+                                  .format(id=entry["id"]))
+    if len(matches) == 1:
+        matches = list(filter(lambda i: filter_infojson(i, log=False), matches))
+        if len(matches) == 1:
+            return matches[0]
+        else:
+            raise error.YTManager("only found an info json while searching for already downloaded "
+                                  "video files. id: {}".format(entry["id"]))
+
+
 def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     # TODO: extract playlist twice, once with and once without archive, to symlink videos
     #       or you could manually check by extracting once without and then using ydl builtins
-    selected_videos = []
     outtmpl =  '%(upload_date)s %(title)s - %(id)s.%(ext)s'
     info_opts = {
         "extract_flat": True,
-        "download_archive": this.globs.args.archive,
+        #"download_archive": this.globs.args.archive,
         "cookiefile": this.globs.args.c,
-        'outtmpl': {'default': outtmpl},
+        "outtmpl": {'default': outtmpl},
         "sleep_interval": 0.3,
         "sleep_interval_requests": 0.3
     }
@@ -256,27 +336,44 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
         info = ydl.extract_info(playlist, download=False, process=True)
     except:
         return
+    assert info["_type"] == "playlist"
 
+    entries = info["entries"]
+    for entry in entries:
+        pass
+    deja_downloaded = entries_in_archive(info["entries"])
+    utils.log("{} videos from playlist {} were already downloaded"
+              .format(len(deja_downloaded), playlist))
+    not_deja_downloaded = entries_in_archive(info["entries"], negate = True)
+    utils.log("{} videos from playlist {} were NOT already downloaded"
+              .format(len(not_deja_downloaded), playlist))
+
+    selected_videos = []
     ignore_all  = [False]
     skip_all    = [False]
-    for entry in info["entries"]:
-        entry = fetch_info(entry["url"])
-        entry["manager_output"] = ydl.evaluate_outtmpl(outtmpl, entry)
-        utils.log(entry)
+
+    if not in_channel:
+        # runs when playlist and not channel is the input
+        utils.log("crawl_playlist() run as playlist, not channel")
+        for entry in deja_downloaded:
+            entry_file = find_deja_downloaded(entry)
+            print(entry_file)
+
+    for entry in not_deja_downloaded:
         if ignore_all[0]:
+            utils.log("recording id {} into archive because ignore_all is true".format(id))
             ydl.record_download_archive(entry)
             continue
 
         if skip_all[0]:
-            break
+            utils.log("skipping {} because skip_all is true".format(id))
+            continue
+
+        entry = fetch_info(entry["url"])
 
         channel = [in_channel]
         if not channel[0]:
-            try:
-                channel[0] = globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
-            except TypeError:
-                utils.log("channel is not added yet for " + entry["id"])
-                add_channel(entry["webpage_url"])
+            channel[0] = get_channel(entry)
         entry["manager_channel"] = channel[0]
 
         if this.globs.args.nc:
@@ -345,7 +442,8 @@ def get_user_format(channel=None):
             continue
         elif req == "":
             if not channel:
-                raise "this function cannot find default format if a channel isnt given. notify the developer or try fixing it urself smh"
+                raise   ("this function cannot find default format if a channel isnt given."
+                        "notify the developer or try fixing it urself smh")
             format.append(channel.preferred_format)
             break
         format.append(req)

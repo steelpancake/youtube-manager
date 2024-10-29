@@ -24,12 +24,19 @@ def print_dict(dictionary):
         print(key)
 
 
-def ask_confirm(dictionary):
+def get_infodict_type(infodict, intype=None):
+    if intype:
+        return intype
     try:
-        type = dictionary["_type"]
+        type = infodict["_type"]
     except:
-        type = lambda : 'video' if dictionary['fps'] else 'UNKNOWN TYPE'
+        type = lambda : 'video' if infodict['fps'] else 'UNKNOWN TYPE'
         type = type()
+    return type
+
+
+def ask_confirm(dictionary, intype=None):
+    type = get_infodict_type(dictionary, intype)
     string = (
         "\nPlease confirm this {type}"
         "\ntitle:\t{title}"

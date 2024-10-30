@@ -1,6 +1,10 @@
 import sys
 import io
+import os
+import config
+import error
 import webbrowser
+import questionary
 
 verbose = True
 args = None
@@ -35,7 +39,7 @@ def get_infodict_type(infodict, intype=None):
     return type
 
 
-def ask_confirm(dictionary, intype=None):
+def ask_confirm_string(dictionary, intype=None):
     type = get_infodict_type(dictionary, intype)
     string = (
         "\nPlease confirm this {type}"
@@ -44,30 +48,74 @@ def ask_confirm(dictionary, intype=None):
         "\nurl:\t{url}"
         "\nuploader:\t{uploader}\n"
     )
+    return string
+
+
+def ask_confirm(dictionary, intype=None):
+    type = get_infodict_type(dictionary, intype)
+    string = ask_confirm_string(dictionary, intype=type)
+    
     tmp = {}
     try:
         tmp["url"] = dictionary["webpage_url"]
     except:
         tmp["url"] = dictionary["url"]
 
-    print(args)
     if not args.nb:
         webbrowser.open(tmp["url"])
 
-    string = string.format(type=type, title=dictionary["title"], id=dictionary["id"],url=tmp["url"], uploader=dictionary["uploader"])
+    string = string.format( type=type, title=dictionary["title"], id=dictionary["id"],
+            url=tmp["url"], uploader=dictionary["uploader"])
     print(string)
-    response = input("confirm?(Yes/No/Ignore) leave blank for no ").lower()
-    if response == "i":
-        return "ignore"
-    elif response == "ia":
-        return "ignore all"
-    elif response == "n":
-        return "no"
-    elif response == "y":
-        return "yes"
-    elif response == "skip":
-        return "skip"
-    return response
+
+    question = "What do you want to do?"
+    if type == "channel":
+        return questionary.rawselect(
+            question,
+            choices=[
+            "add channel",
+            "add and ignore channel"
+            ]).unsafe_ask()
+    elif type == "video":
+        return questionary.rawselect(
+            question,
+            choices=[
+            "queue to download",
+            "queue and ignore this uploader from channel crawls",
+            "ignore this",
+            "ignore this and all later videos in the playlist",
+            "ignore this uploader from channel crawls",
+            "skip this",
+            "skip this and all later videos in the playlist"
+            ]).unsafe_ask()
+    elif type == "single video":
+        return questionary.rawselect(
+            question,
+            choices=[
+            "queue to download",
+            "queue and ignore this uploader from channel crawls",
+            "ignore this",
+            "ignore this uploader from channel crawls",
+            "skip this"
+            ]).unsafe_ask()
+    elif type == "playlist":
+        return questionary.rawselect(
+            question,
+            choices=[
+            "add playlist",
+            "add and ignore playlist",
+            "do not add playlist",
+            ]).unsafe_ask()
+    else: raise error.YTManager("unknown type provided to ask_confirm")
+
+
+# taken from
+# https://stackoverflow.com/questions/9793631/creating-a-relative-symlink-in-python-without-using-os-chdir
+def relative_symlink(src, dst):
+    dir = os.path.dirname(dst)
+    src = os.path.relpath(src, dir)
+    return os.symlink(src, dst)
+
 
 def log(message):
     if verbose:

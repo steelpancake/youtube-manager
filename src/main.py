@@ -29,6 +29,7 @@ def handle_args():
     parser.add_argument("--c",  "--cookies", help="cookie file", default="cookies.txt")
 
     parser.add_argument("--nc", "--no-confirm", action="store_true", help="do not confirm before downloading video")
+    parser.add_argument("--ncc","--no-confirm-channel", action="store_true", help="do not confirm before adding channel")
     parser.add_argument("--nb", "--no-browser", action="store_true", help="do not open browser to show link")
     parser.add_argument("--nf", "--no-format" , action="store_true", help="do not ask the format to download a video in")
     parser.add_argument("--nl", "--no-log"    , action="store_true", help="prevent LOG:")
@@ -37,7 +38,7 @@ def handle_args():
     parser.add_argument("--rf", "--reset-formats", action="store_true", help="reset the formats in config file")
 
 
-    parser.add_argument("--cc", "--crawl-channel", help="download video")
+    parser.add_argument("--cc", "--crawl-channel",  help="download video")
     parser.add_argument("--cp", "--crawl-playlist", help="download video")
 
     args = parser.parse_args()
@@ -91,11 +92,12 @@ def fetch_info(url, process=True):
 
 
 def get_channel(entry):
+    channel_url = config.Channel.channel_url_from_id(entry["channel_id"])
     try:
-        return globs.conf.channels[config.Channel.find_in_list(entry["channel_url"])]
+        return globs.conf.channels[config.Channel.find_in_list(channel_url)]
     except TypeError:
         utils.log("channel is not added yet for " + entry["id"])
-        return add_channel(entry["webpage_url"])
+        return add_channel(channel_url)
 
 
 def add_channel(url):
@@ -122,22 +124,27 @@ def add_channel(url):
         
         channel = config.Channel().from_info_dict(info)
 
-        if this.globs.args.nc or not utils.ask_confirm(info):
-            # name will show up as "Name - Videos" but the " - Videos" will not be present
-            return
-
-        channel.ask_nickname()
+        if this.globs.args.ncc:
+            channel.auto_nickname()
+        else:
+            response = utils.ask_confirm(info, intype="channel")
+            match response:
+                case "add channel":
+                    channel.ask_nickname()
+                case "add and ignore channel":
+                    channel.ask_nickname()
+                    channel.ignore = True
         channel.make_dir()
 
         config.add_channel(this.globs.conf, channel)
         print(channel)
+        config.save(this.globs.conf, path = this.globs.args.conf)
         return channel
 
 
-def entries_in_archive(entries, archive = None, negate: bool = False):
+def entry_in_archive(entry, archive = None, negate: bool = False):
     """
-    checks list of video entries  which is a list of video info_dicts (hopefully) 
-    and returns whichever ones are or aren't already in the archive
+    checks a single entry to see if it's in the archive
     """
     def check_archive():
         if archive == None:
@@ -145,26 +152,33 @@ def entries_in_archive(entries, archive = None, negate: bool = False):
         else:
             return archive
     archive = check_archive()
-    
     info_opts = {
         "download_archive": archive
     }
+
     ydl = yt_dlp.YoutubeDL(info_opts)
 
-    def myfilter(entry):
+    def myfilter(i):
         if negate:
-            return not ydl.in_download_archive(entry)
+            return not ydl.in_download_archive(i)
         else:
-            return ydl.in_download_archive(entry)
-    output = list(filter(myfilter, entries))
+            return ydl.in_download_archive(i)
+    output: bool = myfilter(entry)
 
-    for entry in output:
-        if negate:
-            pass
-        else:
-            string = "{id} has already been recorded in archive".format(id = entry["id"])
-            utils.log(string)
+    if negate:
+        pass
+    elif output:
+        string = "{id} has already been recorded in archive".format(id = entry["id"])
+        utils.log(string)
     return output
+
+
+def entries_in_archive(entries, archive = None, negate: bool = False):
+    """
+    checks list of video entries  which is a list of video info_dicts (hopefully) 
+    and returns whichever ones are or aren't already in the archive
+    """
+    return list(filter(lambda i: entry_in_archive(i, negate=negate, archive=archive), entries))
     
 
 def add_playlist(url):
@@ -187,73 +201,93 @@ def add_playlist(url):
         
         playlist = config.Playlist().from_info_dict(info)
 
-        if this.globs.args.nc or not utils.ask_confirm(info):
-            return
-
-        playlist.ask_nickname()
+        if this.globs.args.ncc:
+            playlist.auto_nickname()
+        else:
+            response = utils.ask_confirm(info, intype="playlist")
+            match response:
+                case "add playlist":
+                    playlist.ask_nickname()
+                case "add and ignore playlist":
+                    playlist.ask_nickname()
+                    playlist.ignore = True
+                case "do not add playlist":
+                    return
         playlist.make_dir()
 
         config.add_playlist(this.globs.conf, playlist)
         print(playlist)
+        config.save(this.globs.conf, path = this.globs.args.conf)
         return playlist
 
 
-def download_video(url):
-    channel = [0]
-    while True:
-        channel[0] = add_channel(url)
-        if channel[0]:
-            break
+def download_video(url, in_channel = None):
+    outtmpl =  '%(upload_date)s %(title)s - %(id)s.%(ext)s'
+    info_opts = {
+        "extract_flat": True,
+        #"download_archive": this.globs.args.archive,
+        "cookiefile": this.globs.args.c,
+        "outtmpl": {'default': outtmpl},
+        "sleep_interval": 0.3,
+        "sleep_interval_requests": 0.3
+    }
+    ydl = yt_dlp.YoutubeDL(info_opts)
+    try:
+        entry = ydl.extract_info(url, download=False, process=True)
+    except:
+        return
+    assert utils.get_infodict_type(entry) == "video"
+
+    is_deja_downloaded: bool = entry_in_archive(entry)
+
+    if is_deja_downloaded:
+        return
+    
+    channel = [in_channel]
+    if not channel[0]:
+        channel[0] = get_channel(entry)
     channel = channel[0]
 
-    info = fetch_info(url)
-    info["manager_channel"] = channel
-
-    if this.globs.args.nc:
-        info["manager_selected_format"] = channel.preferred_format
-        selected_videos.append(entry)
-
-    selected = [False]
-    while True:
-        response = utils.ask_confirm(info)
-        if response == "no":
-            break
-        elif response == "yes":
-            info["manager_selected_format"] = get_user_format(info["manager_channel"])
-            selected[0] = True
-            break
-        elif response == "ignore all":
-            ydl.record_download_archive(info)
-            ignore_all[0] = True
-            break
-        elif response == "ignore":
-            ydl.record_download_archive(info)
-            break
-        print("invalid response")
-
-    if selected[0]:
-        channel = info["manager_channel"]
+    if channel.ignore:
+        utils.log("this channel is ignored from channel crawls {}".format(channel))
         
-        dl_opts = {
-            "extract_flat": True,
-            "download_archive": this.globs.args.archive,
-            "outtmpl": {"default": "{}/".format(channel.dir) + "%(upload_date)s %(title)s - %(id)s.%(ext)s"},
-            "sleep_interval": 0.1,
-            "sleep_interval_requests": 0.1,
-            "concurrent_fragment_downloads": 25,
-            "writeinfojson": True,
-            "cookiefile": this.globs.args.c,
-        }
-        tmp_opts = this.globs.conf.formats[info["manager_selected_format"]]
-        print(jsonpickle.encode(tmp_opts, indent=4))
-        dl_opts.update(tmp_opts)
-        print(jsonpickle.encode(dl_opts, indent=4))
+    response = utils.ask_confirm(entry, intype="single video")
+    match response:
+        case "queue to download":
+            pass
+        case "queue and ignore this uploader from channel crawls":
+            channel.ignore = True
+        case "ignore this":
+            ydl.record_download_archive(entry)
+            return
+        case "ignore this uploader from channel crawls":
+            channel.ignore = True
+            pass
+        case "skip this":
+            return
 
-        ydl_dl = yt_dlp.YoutubeDL(dl_opts)
-        try:
-            output = ydl_dl.download(url)
-        except yt_dlp.utils.DownloadError as e:
-            utils.log_error(e)
+    entry["manager_selected_format"] = get_user_format(channel)
+
+    dl_opts = {
+        "extract_flat": True,
+        "download_archive": this.globs.args.archive,
+        'outtmpl': {'default': "{}/".format(channel.dir) + outtmpl},
+        "sleep_interval": 0.1,
+        "sleep_interval_requests": 0.1,
+        'concurrent_fragment_downloads': 25,
+        'writeinfojson': True,
+        'cookiefile': this.globs.args.c,
+    }
+
+    tmp_opts = this.globs.conf.formats[entry["manager_selected_format"]]
+    print(jsonpickle.encode(tmp_opts, indent=4))
+    dl_opts.update(tmp_opts)
+    print(jsonpickle.encode(dl_opts, indent=4))
+    ydl_dl = yt_dlp.YoutubeDL(dl_opts)
+    try:
+        output = ydl_dl.download(entry["webpage_url"])
+    except yt_dlp.utils.DownloadError as e:
+        utils.log_error(e)
 
 
 def crawl_playlist(index):
@@ -277,7 +311,7 @@ def crawl_channels():
     for channel in this.globs.conf.channels:
         if channel.ignore == False:
             url = config.Channel.playlist_url_from_id(channel.info_dict["channel_id"])
-            crawl_playlist_url(url, channel)
+            crawl_playlist_url(url, inchannel=channel)
 
 
 def crawl_playlists():
@@ -320,8 +354,7 @@ def find_deja_downloaded(entry):
 
 
 def crawl_playlist_url(playlist, in_channel: config.Channel = None):
-    # TODO: extract playlist twice, once with and once without archive, to symlink videos
-    #       or you could manually check by extracting once without and then using ydl builtins
+    # TODO: make --nc work
     outtmpl =  '%(upload_date)s %(title)s - %(id)s.%(ext)s'
     info_opts = {
         "extract_flat": True,
@@ -352,12 +385,25 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     ignore_all  = [False]
     skip_all    = [False]
 
+    def symlink_playlist(entry):
+        entry_file = find_deja_downloaded(entry)
+        playlist_dir = this.globs.conf.playlists[config.Playlist.find_in_list(
+                                                url=info["webpage_url"])
+                                                ].dir
+        try:
+            utils.relative_symlink(entry_file,
+                                   os.path.join("playlists",
+                                                playlist_dir,
+                                                os.path.basename(entry_file)))
+        except FileExistsError:
+            utils.log("symlink for {} already exists in {}, skipping"
+                      .format(entry_file, playlist_dir))
+
     if not in_channel:
         # runs when playlist and not channel is the input
         utils.log("crawl_playlist() run as playlist, not channel")
         for entry in deja_downloaded:
-            entry_file = find_deja_downloaded(entry)
-            print(entry_file)
+            symlink_playlist(entry)
 
     for entry in not_deja_downloaded:
         if ignore_all[0]:
@@ -381,25 +427,27 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
             selected_videos.append(entry)
             continue
 
-        while True:
-            response = utils.ask_confirm(entry)
-            if response == "no":
-                break
-            elif response == "yes":
+        response = utils.ask_confirm(entry, intype="video")
+        match response:
+            case "queue to download":
                 entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
                 selected_videos.append(entry)
-                break
-            elif response == "ignore all":
+            case "queue and ignore this uploader from channel crawls":
+                entry["manager_channel"].ignore = True
+                entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
+                selected_videos.append(entry)
+            case "ignore this":
+                ydl.record_download_archive(entry)
+            case "ignore this and all later videos in the playlist":
                 ydl.record_download_archive(entry)
                 ignore_all[0] = True
-                break
-            elif response == "ignore":
-                ydl.record_download_archive(entry)
-                break
-            elif response == "skip":
+            case "ignore this uploader from channel crawls":
+                entry["manager_channel"].ignore = True
+            case "skip this":
+                pass
+            case "skip this and all later videos in the playlist":
                 skip_all[0] = True
-                break
-            print("invalid response")
+        continue
 
     for entry in selected_videos:
         channel = entry["manager_channel"]
@@ -425,8 +473,8 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
         except yt_dlp.utils.DownloadError as e:
             utils.log_error(e)
 
-        if in_channel != None:
-            pass
+        if not in_channel:
+            symlink_playlist(entry)
 
 
 def get_user_format(channel=None):

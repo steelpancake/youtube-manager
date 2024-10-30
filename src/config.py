@@ -91,7 +91,7 @@ class Channel:
         self.preferred_format = "default"
 
     def __repr__(self):
-        return "<Channel nick: '% s'\n\tdir: '% s'\n\turl: % s>" % (self.nick, self.dir, self.url)
+        return "<Channel nick: '% s'\n\tdir: '% s'\n\tignored: % s\n\turl: % s>" % (self.nick, self.dir,self.ignore, self.url)
 
     def from_dict(self, dictionary):
         self.url = dictionary["url"]
@@ -116,12 +116,19 @@ class Channel:
         self.nick = input("any nickname for this channel? (leave blank for no) ") or self.info_dict["uploader"]
         self.dir = self.nick
 
+    def auto_nickname(self):
+        self.nick = self.info_dict["uploader"]
+        self.dir = self.nick
+
     def url_from_id(url: str):
         return ("https://www.youtube.com/channel/" + url)
 
     def playlist_url_from_id(id: str):
         string = id[2:]
         return "https://www.youtube.com/playlist?list=" + "UU" + string
+
+    def channel_url_from_id(id: str):
+        return "https://www.youtube.com/channel/" + id
 
     def is_url_in_list(url: str, arr):
         for entry in arr:

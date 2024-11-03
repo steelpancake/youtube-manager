@@ -11,6 +11,7 @@ import re
 import os
 import error
 from glob import glob, iglob
+from pathlib import Path
 
 # global vars that actually work
 class Box:
@@ -75,6 +76,8 @@ def main():
         this.globs.conf.reset_formats()
     elif args.cp:
         crawl_playlist(args.cp)
+    elif args.cc:
+        crawl_channel(args.cc)
     else:
         crawl()
     config.save(this.globs.conf, path = this.globs.args.conf)
@@ -231,7 +234,11 @@ def download_video(url, in_channel = None):
         "sleep_interval": 0.3,
         "sleep_interval_requests": 0.3
     }
+    archive_opts = {
+        "download_archive": this.globs.args.archive
+    }
     ydl = yt_dlp.YoutubeDL(info_opts)
+    ydl_archive = yt_dlp.YoutubeDL(archive_opts)
     try:
         entry = ydl.extract_info(url, download=False, process=True)
     except:
@@ -258,7 +265,7 @@ def download_video(url, in_channel = None):
         case "queue and ignore this uploader from channel crawls":
             channel.ignore = True
         case "ignore this":
-            ydl.record_download_archive(entry)
+            ydl_archive.record_download_archive(entry)
             return
         case "ignore this uploader from channel crawls":
             channel.ignore = True
@@ -298,6 +305,14 @@ def crawl_playlist(index):
     crawl_playlist_url(playlist.url)
 
 
+def crawl_channel(index):
+    utils.log("crawling channel number "+index)
+    # input may be provided as string
+    index = int(index)
+    channel = this.globs.conf.channels[index]
+    crawl_playlist_url(config.Channel.playlist_url_from_id(channel.info_dict["channel_id"]), in_channel=channel)
+
+
 def crawl():
     crawl_channels()
     crawl_playlists()
@@ -311,7 +326,7 @@ def crawl_channels():
     for channel in this.globs.conf.channels:
         if channel.ignore == False:
             url = config.Channel.playlist_url_from_id(channel.info_dict["channel_id"])
-            crawl_playlist_url(url, inchannel=channel)
+            crawl_playlist_url(url, in_channel=channel)
 
 
 def crawl_playlists():
@@ -319,6 +334,7 @@ def crawl_playlists():
 
 
 def find_deja_downloaded(entry):
+    utils.log("find_deja_downloaded run with video id {}".format(entry["id"]))
     matches = []
     for direntry in iglob("./**", recursive=True):
         if not os.path.isfile(direntry):
@@ -335,10 +351,17 @@ def find_deja_downloaded(entry):
             if log: utils.log("found two matches while searching for already downloaded id {id}, "
                               "one of them is an info json: {i}`\nthe other one will be symlinked"
                               " to".format(id=entry["id"], i=i))
+        elif i.endswith(".description"):
+            pass
+        elif i.endswith(".jpg"):
+            pass
+        elif i.endswith(".webp"):
+            pass
         else:
             return True
 
-    if len(matches) == 2:
+    utils.log("while running find_deja_downloaded, {} matches were found".format(len(matches)))
+    if len(matches) >= 2:
         matches = list(filter(filter_infojson, matches))
         if len(matches) == 2:
             raise error.YTManager("while filtering two matched files with id: {id} neither were "
@@ -364,7 +387,11 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
         "sleep_interval": 0.3,
         "sleep_interval_requests": 0.3
     }
+    archive_opts = {
+        "download_archive": this.globs.args.archive
+    }
     ydl = yt_dlp.YoutubeDL(info_opts)
+    ydl_archive = yt_dlp.YoutubeDL(archive_opts)
     try:
         info = ydl.extract_info(playlist, download=False, process=True)
     except:
@@ -377,7 +404,7 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     deja_downloaded = entries_in_archive(info["entries"])
     utils.log("{} videos from playlist {} were already downloaded"
               .format(len(deja_downloaded), playlist))
-    not_deja_downloaded = entries_in_archive(info["entries"], negate = True)
+    not_deja_downloaded = [x for x in info["entries"] if x not in deja_downloaded]
     utils.log("{} videos from playlist {} were NOT already downloaded"
               .format(len(not_deja_downloaded), playlist))
 
@@ -386,18 +413,28 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     skip_all    = [False]
 
     def symlink_playlist(entry):
-        entry_file = find_deja_downloaded(entry)
+        try:
+            entry_file = find_deja_downloaded(entry)
+        except Exception as e:
+            utils.log_error(str(e))
+            input("press <Enter> to continue")
+            return 
+        utils.log(entry_file)
         playlist_dir = this.globs.conf.playlists[config.Playlist.find_in_list(
                                                 url=info["webpage_url"])
                                                 ].dir
+        # ^ channel - name.ext
         try:
+            sym_name = str(Path(entry_file).parent) + " - " + os.path.basename(entry_file)
             utils.relative_symlink(entry_file,
                                    os.path.join("playlists",
                                                 playlist_dir,
-                                                os.path.basename(entry_file)))
+                                                sym_name))
         except FileExistsError:
             utils.log("symlink for {} already exists in {}, skipping"
                       .format(entry_file, playlist_dir))
+        except TypeError:
+            utils.log("video was in archive but not in filesystem")
 
     if not in_channel:
         # runs when playlist and not channel is the input
@@ -415,7 +452,11 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
             utils.log("skipping {} because skip_all is true".format(id))
             continue
 
-        entry = fetch_info(entry["url"])
+        try:
+            entry = fetch_info(entry["url"])
+        except:
+            utils.log_error("error fetching info, skipping")
+            continue
 
         channel = [in_channel]
         if not channel[0]:
@@ -437,9 +478,9 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
                 entry["manager_selected_format"] = get_user_format(entry["manager_channel"])
                 selected_videos.append(entry)
             case "ignore this":
-                ydl.record_download_archive(entry)
+                ydl_archive.record_download_archive(entry)
             case "ignore this and all later videos in the playlist":
-                ydl.record_download_archive(entry)
+                ydl_archive.record_download_archive(entry)
                 ignore_all[0] = True
             case "ignore this uploader from channel crawls":
                 entry["manager_channel"].ignore = True

@@ -385,6 +385,7 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
         "cookiefile": this.globs.args.c,
         "outtmpl": {'default': outtmpl},
         "sleep_interval": 0.3,
+        'extractor_args': {'youtube': {'player_client': 'web_embedded'}},
         "sleep_interval_requests": 0.3
     }
     archive_opts = {
@@ -392,6 +393,7 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
     }
     ydl = yt_dlp.YoutubeDL(info_opts)
     ydl_archive = yt_dlp.YoutubeDL(archive_opts)
+    print("Getting info for playlist {}\n\n\n\n".format(playlist))
     try:
         info = ydl.extract_info(playlist, download=False, process=True)
     except:
@@ -502,6 +504,7 @@ def crawl_playlist_url(playlist, in_channel: config.Channel = None):
             'concurrent_fragment_downloads': 25,
             'writeinfojson': True,
             'cookiefile': this.globs.args.c,
+            'extractor_args': {'youtube': {'player_client': 'web_embedded'}}
         }
         tmp_opts = this.globs.conf.formats[entry["manager_selected_format"]]
         print(jsonpickle.encode(tmp_opts, indent=4))
